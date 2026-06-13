@@ -8,7 +8,7 @@ pub enum Ordering {
     Desc,
 }
 
-/// Builds PostgREST query strings into a fixed-capacity heapless::String<N>.
+/// Builds PostgREST query strings into a fixed-capacity `heapless::String<N>`.
 ///
 /// # Example
 /// ```
@@ -20,6 +20,7 @@ pub enum Ordering {
 /// qb.limit(10).unwrap();
 /// assert_eq!(qb.as_str(), "/rest/v1/users?select=id,name&id=eq.42&limit=10");
 /// ```
+#[derive(Debug)]
 pub struct QueryBuilder<const N: usize> {
     buf: String<N>,
     has_params: bool,

@@ -4,13 +4,16 @@ version = "0.1.0"
 edition = "2021"
 description = "no_std Supabase client for embedded devices"
 license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["supabase", "postgrest", "embedded", "no-std"]
+categories = ["embedded", "no-std", "api-bindings"]
 
 [dependencies]
 heapless = "0.8"
 serde = { version = "1", default-features = false, features = ["derive"] }
 serde-json-core = "0.6"
-embedded-io-async = "0.6"
-embedded-nal-async = "0.8"
+embedded-io-async = "0.7"
+embedded-nal-async = "0.9"
 reqwless = { version = "0.14", default-features = false }
 
 [dev-dependencies]
@@ -18,6 +21,10 @@ serde_json = "1"
 
 [features]
 default = []
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [profile.release]
 opt-level = "z"

@@ -4,7 +4,7 @@ use crate::response::SupabaseResponse;
 use embedded_nal_async::{Dns, TcpConnect};
 use reqwless::client::HttpClient;
 use reqwless::headers::ContentType;
-use reqwless::request::Method as ReqwlessMethod;
+use reqwless::request::{Method as ReqwlessMethod, RequestBuilder};
 
 fn to_reqwless_method(m: Method) -> ReqwlessMethod {
     match m {
@@ -49,31 +49,10 @@ where
 
     let method = to_reqwless_method(builder.method());
 
-    let mut request = http
-        .request(method, url)
-        .await
-        .map_err(|_| Error::ConnectionFailed)?;
-
-    if let Some(auth) = builder.auth_ref() {
-        request = request.headers(&[("apikey", auth.api_key)]);
-        if let Some(token) = auth.bearer_token {
-            let mut bearer_val: heapless::String<512> = heapless::String::new();
-            bearer_val
-                .push_str("Bearer ")
-                .map_err(|_| Error::BufferTooSmall)?;
-            bearer_val
-                .push_str(token)
-                .map_err(|_| Error::BufferTooSmall)?;
-
-            // We need to pass headers as a slice, but bearer_val is local.
-            // reqwless headers() takes &[(&str, &str)] so we must chain calls.
-            request = request.headers(&[("Authorization", bearer_val.as_str())]);
-        }
-    }
-
-    // Build Prefer header value
+    let mut bearer_val: heapless::String<512> = heapless::String::new();
     let mut prefer_parts: heapless::String<128> = heapless::String::new();
     let mut has_prefer = false;
+
     if builder.wants_upsert() {
         let _ = prefer_parts.push_str("resolution=merge-duplicates");
         has_prefer = true;
@@ -92,30 +71,68 @@ where
         let _ = prefer_parts.push_str("count=exact");
         has_prefer = true;
     }
-    if has_prefer {
-        request = request.headers(&[("Prefer", prefer_parts.as_str())]);
+
+    let mut headers = [("", ""); 3];
+    let mut header_count = 0;
+
+    if let Some(auth) = builder.auth_ref() {
+        headers[header_count] = ("apikey", auth.api_key);
+        header_count += 1;
+
+        if let Some(token) = auth.bearer_token {
+            bearer_val
+                .push_str("Bearer ")
+                .map_err(|_| Error::BufferTooSmall)?;
+            bearer_val
+                .push_str(token)
+                .map_err(|_| Error::BufferTooSmall)?;
+            headers[header_count] = ("Authorization", bearer_val.as_str());
+            header_count += 1;
+        }
     }
 
-    let response = if let Some(body_bytes) = builder.body() {
-        request
-            .body(body_bytes)
-            .content_type(ContentType::ApplicationJson)
-            .send(rx_buf)
-            .await
-            .map_err(|_| Error::ConnectionFailed)?
-    } else {
-        request
-            .send(rx_buf)
-            .await
-            .map_err(|_| Error::ConnectionFailed)?
-    };
+    if has_prefer {
+        headers[header_count] = ("Prefer", prefer_parts.as_str());
+        header_count += 1;
+    }
 
-    let status = response.status.0;
-    let body = response
-        .body()
-        .read_to_end()
+    let mut request = http
+        .request(method, url)
         .await
-        .map_err(|_| Error::BufferTooSmall)?;
+        .map_err(|_| Error::ConnectionFailed)?;
+
+    if header_count > 0 {
+        request = request.headers(&headers[..header_count]);
+    }
+
+    let (status, body) = if let Some(body_bytes) = builder.body() {
+        let mut request = request
+            .body(body_bytes)
+            .content_type(ContentType::ApplicationJson);
+        let response = request
+            .send(rx_buf)
+            .await
+            .map_err(|_| Error::ConnectionFailed)?;
+        let status = response.status.0;
+        let body = response
+            .body()
+            .read_to_end()
+            .await
+            .map_err(|_| Error::BufferTooSmall)?;
+        (status, body)
+    } else {
+        let response = request
+            .send(rx_buf)
+            .await
+            .map_err(|_| Error::ConnectionFailed)?;
+        let status = response.status.0;
+        let body = response
+            .body()
+            .read_to_end()
+            .await
+            .map_err(|_| Error::BufferTooSmall)?;
+        (status, body)
+    };
 
     Ok(SupabaseResponse::new(status, body))
 }
