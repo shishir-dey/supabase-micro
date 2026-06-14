@@ -73,3 +73,14 @@ Run tests and doctests with:
 ```sh
 cargo test
 ```
+
+The library runtime transport remains `reqwless` for embedded targets. Host
+integration tests use a test-only `reqwest` executor and load Supabase settings
+from `.env`:
+
+```sh
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_TEST_TABLE=users
+# optional: SUPABASE_TEST_SELECT=id,name
+```
