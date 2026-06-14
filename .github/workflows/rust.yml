@@ -28,4 +28,4 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           SUPABASE_TEST_TABLE: ${{ secrets.SUPABASE_TEST_TABLE }}
           SUPABASE_TEST_SELECT: ${{ secrets.SUPABASE_TEST_SELECT }}
-        run: cargo test --verbose --test host_transport
+        run: cargo test --verbose --test host_reqwest
