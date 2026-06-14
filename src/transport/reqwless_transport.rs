@@ -1,6 +1,7 @@
 use crate::error::Error;
 use crate::postgrest::{Method, PostgrestBuilder};
 use crate::response::SupabaseResponse;
+use crate::transport::request::{write_url, RequestHeaders, MAX_REQUEST_HEADERS};
 use embedded_nal_async::{Dns, TcpConnect};
 use reqwless::client::HttpClient;
 use reqwless::headers::ContentType;
@@ -35,66 +36,11 @@ where
     T: TcpConnect + 'a,
     D: Dns + 'a,
 {
-    let base = builder.base_url();
-    let path = builder.path();
-    let total_len = base.len() + path.len();
-
-    if total_len > url_buf.len() {
-        return Err(Error::UrlTooLong);
-    }
-
-    url_buf[..base.len()].copy_from_slice(base.as_bytes());
-    url_buf[base.len()..total_len].copy_from_slice(path.as_bytes());
-    let url = core::str::from_utf8(&url_buf[..total_len]).map_err(|_| Error::Utf8)?;
-
+    let url = write_url(builder, url_buf)?;
     let method = to_reqwless_method(builder.method());
-
-    let mut bearer_val: heapless::String<512> = heapless::String::new();
-    let mut prefer_parts: heapless::String<128> = heapless::String::new();
-    let mut has_prefer = false;
-
-    if builder.wants_upsert() {
-        let _ = prefer_parts.push_str("resolution=merge-duplicates");
-        has_prefer = true;
-    }
-    if builder.wants_return() {
-        if has_prefer {
-            let _ = prefer_parts.push_str(", ");
-        }
-        let _ = prefer_parts.push_str("return=representation");
-        has_prefer = true;
-    }
-    if builder.wants_count() {
-        if has_prefer {
-            let _ = prefer_parts.push_str(", ");
-        }
-        let _ = prefer_parts.push_str("count=exact");
-        has_prefer = true;
-    }
-
-    let mut headers = [("", ""); 3];
-    let mut header_count = 0;
-
-    if let Some(auth) = builder.auth_ref() {
-        headers[header_count] = ("apikey", auth.api_key);
-        header_count += 1;
-
-        if let Some(token) = auth.bearer_token {
-            bearer_val
-                .push_str("Bearer ")
-                .map_err(|_| Error::BufferTooSmall)?;
-            bearer_val
-                .push_str(token)
-                .map_err(|_| Error::BufferTooSmall)?;
-            headers[header_count] = ("Authorization", bearer_val.as_str());
-            header_count += 1;
-        }
-    }
-
-    if has_prefer {
-        headers[header_count] = ("Prefer", prefer_parts.as_str());
-        header_count += 1;
-    }
+    let request_headers = RequestHeaders::from_builder(builder)?;
+    let mut headers = [("", ""); MAX_REQUEST_HEADERS];
+    let header_count = request_headers.write_into(&mut headers)?;
 
     let mut request = http
         .request(method, url)
